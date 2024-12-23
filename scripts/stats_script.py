@@ -488,10 +488,11 @@ def generate_abstract_pattern(width: int, height: int, complexity: int = 30) -> 
             random.randint(50, 150)
         )
 
-        x1 = random.randint(0, width)
-        y1 = random.randint(0, height)
-        x2 = random.randint(0, width)
-        y2 = random.randint(0, height)
+        # Generate coordinates ensuring x1,y1 is always top-left and x2,y2 is bottom-right
+        x1 = random.randint(0, width - 1)
+        y1 = random.randint(0, height - 1)
+        x2 = random.randint(x1 + 1, width)
+        y2 = random.randint(y1 + 1, height)
 
         if shape_type == 'circle':
             draw.ellipse([x1, y1, x2, y2], fill=color, outline=None)
