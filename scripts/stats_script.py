@@ -17,10 +17,11 @@ import time
 from functools import wraps
 
 import requests
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import numpy as np
+import random
 
 # --- Configuration ---
 logging.basicConfig(
@@ -457,24 +458,67 @@ def create_pie_chart(data: Dict[str, int], title: str, output_file: str) -> None
     plt.close()
 
 def create_contribution_chart(contribution_data: Dict[str, Any], output_file: str) -> None:
-    """Create contribution trend chart."""
+    """Create contribution trend chart with improved styling."""
     dates, counts = [], []
     for week in contribution_data['weeks']:
         for day in week['contributionDays']:
             dates.append(datetime.strptime(day['date'], '%Y-%m-%d'))
             counts.append(day['contributionCount'])
 
-    plt.figure(figsize=(10, 3))
-    plt.plot(dates, counts)
+    plt.style.use('dark_background')
+    plt.figure(figsize=(10, 2))
+    plt.plot(dates, counts, color='#6495ED', linewidth=2)
+    plt.fill_between(dates, counts, alpha=0.2, color='#6495ED')
     plt.gca().xaxis.set_major_locator(mdates.MonthLocator())
-    plt.title("Contribution Activity")
-    plt.savefig(output_file, bbox_inches='tight')
+    plt.grid(True, alpha=0.1)
+    plt.savefig(output_file, bbox_inches='tight', transparent=True)
     plt.close()
+
+def generate_abstract_pattern(width: int, height: int, complexity: int = 30) -> Image.Image:
+    """Generate random abstract pattern."""
+    img = Image.new('RGB', (width, height), (35, 35, 35))
+    draw = ImageDraw.Draw(img)
+
+    # Generate random shapes and patterns
+    for _ in range(complexity):
+        shape_type = random.choice(['circle', 'line', 'rectangle'])
+        color = (
+            random.randint(30, 100),
+            random.randint(40, 120),
+            random.randint(50, 150)
+        )
+
+        x1 = random.randint(0, width)
+        y1 = random.randint(0, height)
+        x2 = random.randint(0, width)
+        y2 = random.randint(0, height)
+
+        if shape_type == 'circle':
+            draw.ellipse([x1, y1, x2, y2], fill=color, outline=None)
+        elif shape_type == 'line':
+            draw.line([x1, y1, x2, y2], fill=color, width=random.randint(1, 3))
+        else:
+            draw.rectangle([x1, y1, x2, y2], fill=color, outline=None)
+
+    # Apply filters for more aesthetic look
+    img = img.filter(ImageFilter.GaussianBlur(radius=2))
+    img = ImageEnhance.Brightness(img).enhance(0.7)
+    return img
+
+def generate_ascii_border() -> str:
+    """Generate random ASCII art border."""
+    borders = [
+        "╔══╗ ╔══╗",
+        "┌──┐ ┌──┐",
+        "╭──╮ ╭──╮",
+        "▄▄▄▄ ▄▄▄▄"
+    ]
+    return random.choice(borders)
 
 class ImageGenerator:
     """Handles the generation of the statistics image."""
 
-    def __init__(self, width: int = 1000, height: int = 1600):
+    def __init__(self, width: int = 1000, height: int = 1200):
         self.width = width
         self.height = height
         self.bg_color = (35, 35, 35)
@@ -488,8 +532,7 @@ class ImageGenerator:
     def create_image(self, user_data: Dict, repo_data: Dict, contributions: int) -> None:
         """Create the main statistics image."""
         try:
-            self.img = Image.new("RGB", (self.width, self.height), color=self.bg_color)
-            self.draw = ImageDraw.Draw(self.img)
+            self._create_base_image()
 
             # Draw header
             self._draw_header(user_data)
@@ -513,6 +556,16 @@ class ImageGenerator:
                     except Exception as e:
                         logger.warning(f"Failed to remove temporary file {temp_file}: {e}")
 
+    def _create_base_image(self):
+        """Create base image with abstract background."""
+        self.img = generate_abstract_pattern(self.width, self.height)
+        self.draw = ImageDraw.Draw(self.img)
+
+        # Add semi-transparent overlay for better text readability
+        overlay = Image.new('RGBA', (self.width, self.height), (35, 35, 35, 180))
+        self.img = Image.alpha_composite(self.img.convert('RGBA'), overlay)
+        self.draw = ImageDraw.Draw(self.img)
+
     def _draw_header(self, user_data: Dict) -> None:
         """Draw the header section of the image."""
         if not self.draw:
@@ -524,44 +577,44 @@ class ImageGenerator:
                       fill=self.text_color, font=self.smaller_font)
 
     def _draw_statistics(self, repo_data: Dict, contributions: int) -> None:
-        """Draw the statistics section of the image."""
+        """Draw the statistics section with improved layout."""
         if not self.draw or not self.img:
             return
 
         try:
             start_y = 150
             ext_stats = get_extended_stats()
-            contribution_counts = get_contribution_counts()
+
+            # Draw ASCII border
+            border = generate_ascii_border()
+            self.draw.text((40, start_y - 30), border, fill=self.accent_color, font=self.smaller_font)
 
             metrics = [
-                f"Total Contributions: {ext_stats['total_contributions']} (Public: {ext_stats['public_contributions']}, Private: {ext_stats['private_contributions']})",
-                f"Stars Earned: {repo_data['stars']} | Stars Given: {ext_stats['stars_given']}",
-                f"Issues: {ext_stats['total_issues']} | Pull Requests: {ext_stats['total_prs']}",
-                f"Followers: {ext_stats['followers']} | Following: {ext_stats['following']}"
+                f"▶ Total: {ext_stats['total_contributions']} (📊 Public: {ext_stats['public_contributions']}, 🔒 Private: {ext_stats['private_contributions']})",
+                f"⭐ Stars: {repo_data['stars']} Given: {ext_stats['stars_given']}",
+                f"📝 Issues: {ext_stats['total_issues']} | PRs: {ext_stats['total_prs']}",
+                f"👥 Followers: {ext_stats['followers']} | Following: {ext_stats['following']}"
             ]
 
             for i, m in enumerate(metrics):
-                self.draw.text((40, start_y + i * 40), m, fill=self.text_color, font=self.smaller_font)
+                self.draw.text((40, start_y + i * 35), m, fill=self.text_color, font=self.smaller_font)
 
-            # Contribution Trends - adjusted position
+            # Contribution graph with reduced spacing
             contrib_chart_file = "contribution_chart.png"
-            try:
-                contribution_data = get_contribution_history()
-                create_contribution_chart(contribution_data, contrib_chart_file)
-                if os.path.exists(contrib_chart_file):
-                    contrib_chart = Image.open(contrib_chart_file)
-                    self.img.paste(contrib_chart.resize((900, 250)), (40, start_y + 200))  # Reduced from 300 to 200
-                    contrib_chart.close()
-            except Exception as e:
-                logger.error(f"Failed to create contribution chart: {e}")
+            contribution_data = get_contribution_history()
+            create_contribution_chart(contribution_data, contrib_chart_file)
+            if os.path.exists(contrib_chart_file):
+                contrib_chart = Image.open(contrib_chart_file)
+                self.img.paste(contrib_chart.resize((900, 200)), (40, start_y + 160))
+                contrib_chart.close()
 
-            # Rest of the drawing code remains the same
-            # ...existing code...
+            # Adjust other sections' positioning
+            self._draw_repositories(start_y + 400)
+            self._draw_achievements(start_y + 600)
 
-    # Remove the _draw_footer method completely
-    def _draw_footer(self) -> None:
-        """Empty method to remove footer."""
-        pass
+        except Exception as e:
+            logger.error(f"Error in drawing statistics: {e}")
+            raise
 
     def _draw_repositories(self, start_y: int) -> None:
         """Draw repository section."""
