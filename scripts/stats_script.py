@@ -76,8 +76,8 @@ def create_image(user_data, repo_data, contributions):
     width, height = 800, 1000
     bg_color = (255, 255, 255)
     text_color = (0, 0, 0)
-    font = ImageFont.truetype("arial.ttf", size=20)
-    title_font = ImageFont.truetype("arial.ttf", size=30)
+    font = ImageFont.load_default()  # Use default font
+    title_font = ImageFont.load_default()  # Use default font
 
     # Create base image
     img = Image.new("RGB", (width, height), color=bg_color)
