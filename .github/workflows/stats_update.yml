@@ -1,0 +1,36 @@
+name: Update GitHub Stats
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *" # Daily at midnight UTC
+
+jobs:
+  generate-stats:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+
+      - name: Install Dependencies
+        run: pip install requests matplotlib pillow
+
+      - name: Run Stats Script
+        - env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            USERNAME: ${{ secrets.USERNAME }}
+        run: python scripts/stats_script.py
+
+      - name: Commit and Push Updates
+        run: |
+          git config --local user.name "GitHub Action"
+          git config --local user.email "action@github.com"
+          git add stats_image.png
+          git commit -m "Update stats image"
+          git push
+
