@@ -1,13 +1,49 @@
 name: Update GitHub Stats
 
+# Trigger on manual dispatch or twice daily (9 AM and 5 PM Nepal Time)
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Manual trigger
   schedule:
-    - cron: "0 0 * * *" # Daily at midnight UTC
+    - cron: "15 3,11 * * *"  # 9:00 AM and 5:00 PM Nepal Time (UTC+5:45)
 
 jobs:
-  generate-stats:
+  setup:
+    name: Setup Environment
     runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.cache-deps.outputs.cache-hit }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        id: setup-python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.x"
+          cache: 'pip'
+
+      - name: Cache Dependencies
+        id: cache-deps
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Dependencies
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests matplotlib pillow numpy
+
+  generate-stats:
+    name: Generate Statistics
+    needs: setup
+    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -17,20 +53,66 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Install Dependencies
-        run: pip install requests matplotlib pillow numpy
+      - name: Restore Dependencies Cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
 
-      - name: Run Stats Script
+      - name: Generate Stats Image
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
           USERNAME: ${{ secrets.USERNAME }}
-        run: python scripts/stats_script.py
+        run: |
+          python scripts/stats_script.py
+        continue-on-error: false
+
+  update-repo:
+    name: Update Repository
+    needs: generate-stats
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Check for Changes
+        id: check-changes
+        run: |
+          if [[ -f "stats_image.png" ]]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Commit and Push Updates
+        if: steps.check-changes.outputs.changes == 'true'
         run: |
-          git config --local user.name "GitHub Action"
+          git config --local user.name "GitHub Action Bot"
           git config --local user.email "action@github.com"
+
+          # Stage only the stats image
           git add stats_image.png
-          git commit -m "Update stats image"
-          git push
+
+          # Get current date for commit message
+          current_date=$(date +'%Y-%m-%d')
+          git commit -m "Update stats image for ${current_date}"
+
+          # Push changes
+          git push origin ${GITHUB_REF#refs/heads/}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    name: Notification
+    needs: [generate-stats, update-repo]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check Workflow Status
+        if: ${{ contains(needs.*.result, 'failure') }}
+        run: |
+          echo "::error::Workflow failed! Please check the logs for more details."
+          exit 1
 
