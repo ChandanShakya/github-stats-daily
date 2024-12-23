@@ -13,7 +13,7 @@ USERNAME = os.getenv("USERNAME")
 OUTPUT_IMAGE = "stats_image.png"
 
 if not GITHUB_TOKEN or not USERNAME:
-    raise ValueError("GITHUB_TOKEN and USERNAME must be set as environment variables."
+    raise ValueError("GITHUB_TOKEN and USERNAME must be set as environment variables.")
 
 # GitHub API URLs
 BASE_URL = "https://api.github.com"
