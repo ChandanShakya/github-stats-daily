@@ -95,27 +95,51 @@ def get_contributions() -> int:
 
 def get_contribution_history() -> Dict[str, Any]:
     """Fetch contribution history for the past year."""
-    query = f"""
-    query {{
-      user(login: "{Config.USERNAME}") {{
-        contributionsCollection {{
-          contributionCalendar {{
+    query = """
+    query($login: String!) {
+      user(login: $login) {
+        contributionsCollection {
+          contributionCalendar {
             totalContributions
-            weeks {{
-              contributionDays {{
+            weeks {
+              contributionDays {
                 date
                 contributionCount
-              }}
-            }}
-          }}
-        }}
-      }}
-    }}
+              }
+            }
+          }
+        }
+      }
+    }
     """
-    headers = {"Authorization": f"Bearer {Config.GITHUB_TOKEN}"}
-    response = requests.post("https://api.github.com/graphql", json={"query": query}, headers=headers)
-    data = response.json()
-    return data['data']['user']['contributionsCollection']['contributionCalendar']
+    try:
+        variables = {"login": Config.USERNAME}
+        headers = {
+            "Authorization": f"Bearer {Config.GITHUB_TOKEN}",
+            "Content-Type": "application/json",
+        }
+        response = requests.post(
+            "https://api.github.com/graphql",
+            json={"query": query, "variables": variables},
+            headers=headers,
+            timeout=30
+        )
+        response.raise_for_status()
+
+        result = response.json()
+        if "errors" in result:
+            logger.error(f"GraphQL Error: {result['errors']}")
+            return {"totalContributions": 0, "weeks": []}
+
+        if not result.get("data") or not result["data"].get("user"):
+            logger.error("Invalid GraphQL response structure")
+            return {"totalContributions": 0, "weeks": []}
+
+        return result["data"]["user"]["contributionsCollection"]["contributionCalendar"]
+
+    except Exception as e:
+        logger.error(f"Failed to fetch contribution history: {e}")
+        return {"totalContributions": 0, "weeks": []}
 
 def get_extended_stats() -> Dict[str, Any]:
     """Fetch extended stats like earned stars, lines added, lines deleted, etc."""
@@ -156,31 +180,74 @@ def get_extended_stats() -> Dict[str, Any]:
       }
     }
     """
-    variables = {"login": Config.USERNAME}
-    headers = {"Authorization": f"Bearer {Config.GITHUB_TOKEN}"}
-    response = requests.post("https://api.github.com/graphql", json={"query": query, "variables": variables}, headers=headers)
-    data = response.json()["data"]["user"]
+    try:
+        variables = {"login": Config.USERNAME}
+        headers = {
+            "Authorization": f"Bearer {Config.GITHUB_TOKEN}",
+            "Content-Type": "application/json",
+        }
+        response = requests.post(
+            "https://api.github.com/graphql",
+            json={"query": query, "variables": variables},
+            headers=headers,
+            timeout=30
+        )
+        response.raise_for_status()
 
-    # Earned stars is sum of all stargazers across repos
-    earned_stars = sum(repo["node"]["stargazers"]["totalCount"] for repo in data["repositories"]["edges"])
-    # Rough additions / deletions from the latest 100 commits in the default branches of top repos
-    lines_added = 0
-    lines_deleted = 0
-    for repo in data["repositories"]["edges"]:
-        branches = repo["node"]["defaultBranchRef"]
-        if branches and "target" in branches:
-            history = branches["target"]["history"]
-            for commit in history["edges"]:
-                lines_added += commit["node"]["additions"]
-                lines_deleted += commit["node"]["deletions"]
+        result = response.json()
+        if "errors" in result:
+            logger.error(f"GraphQL Error: {result['errors']}")
+            return {
+                "earned_stars": 0,
+                "lines_added": 0,
+                "lines_deleted": 0,
+                "total_issues": 0,
+                "total_prs": 0
+            }
 
-    return {
-        "earned_stars": earned_stars,
-        "lines_added": lines_added,
-        "lines_deleted": lines_deleted,
-        "total_issues": data["issues"]["totalCount"],
-        "total_prs": data["pullRequests"]["totalCount"]
-    }
+        if not result.get("data") or not result["data"].get("user"):
+            logger.error("Invalid GraphQL response structure")
+            return {
+                "earned_stars": 0,
+                "lines_added": 0,
+                "lines_deleted": 0,
+                "total_issues": 0,
+                "total_prs": 0
+            }
+
+        data = result["data"]["user"]
+        earned_stars = sum(
+            repo["node"]["stargazers"]["totalCount"]
+            for repo in data["repositories"]["edges"]
+        )
+
+        lines_added = 0
+        lines_deleted = 0
+        for repo in data["repositories"]["edges"]:
+            branches = repo["node"].get("defaultBranchRef")
+            if branches and branches.get("target"):
+                history = branches["target"]["history"]
+                for commit in history.get("edges", []):
+                    lines_added += commit["node"].get("additions", 0)
+                    lines_deleted += commit["node"].get("deletions", 0)
+
+        return {
+            "earned_stars": earned_stars,
+            "lines_added": lines_added,
+            "lines_deleted": lines_deleted,
+            "total_issues": data["issues"]["totalCount"],
+            "total_prs": data["pullRequests"]["totalCount"]
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to fetch extended stats: {e}")
+        return {
+            "earned_stars": 0,
+            "lines_added": 0,
+            "lines_deleted": 0,
+            "total_issues": 0,
+            "total_prs": 0
+        }
 
 def get_achievements() -> Dict[str, Any]:
     """Compute achievements from contribution history."""
