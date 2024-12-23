@@ -225,40 +225,112 @@ def get_contribution_history() -> Dict[str, Any]:
         return {"totalContributions": 0, "weeks": []}
 
 def get_extended_stats() -> Dict[str, Any]:
-    """Fetch extended stats like earned stars, lines added, lines deleted, etc."""
+    """Fetch extended stats including private contributions."""
     query = """
     query($login: String!) {
       user(login: $login) {
-        repositories(first: 100, orderBy: {field: STARGAZERS, direction: DESC}) {
+        repositories(first: 100, orderBy: {field: STARGAZERS, direction: DESC}, privacy: PUBLIC) {
           edges {
             node {
               name
               stargazers {
                 totalCount
               }
-              defaultBranchRef {
-                target {
-                  ... on Commit {
-                    history(first: 100) {
-                      totalCount
-                      edges {
-                        node {
-                          additions
-                          deletions
-                        }
-                      }
-                    }
-                  }
-                }
-              }
             }
           }
         }
-        issues {
+        contributionsCollection {
+          totalCommitContributions
+          totalIssueContributions
+          totalPullRequestContributions
+          totalPullRequestReviewContributions
+          restrictedContributionsCount
+          contributionYears
+        }
+        followers {
           totalCount
         }
-        pullRequests {
+        following {
           totalCount
+        }
+        starredRepositories {
+          totalCount
+        }
+        contributionsCollection {
+          totalCommitContributions
+          totalRepositoryContributions
+          contributionCalendar {
+            totalContributions
+          }
+        }
+        issues(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
+          totalCount
+          nodes {
+            createdAt
+          }
+        }
+        pullRequests(first: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
+          totalCount
+          nodes {
+            createdAt
+          }
+        }
+      }
+    }
+    """
+
+    try:
+        variables = {"login": Config.USERNAME}
+        result = graphql_query(query, variables)
+
+        if not result.get("data") or not result["data"].get("user"):
+            logger.error("Invalid GraphQL response structure")
+            return {}
+
+        data = result["data"]["user"]
+
+        # Get most starred repo
+        repos = data["repositories"]["edges"]
+        most_starred_repo = max(repos, key=lambda x: x["node"]["stargazers"]["totalCount"], default=None)
+        most_starred_repo_info = (
+            f"{most_starred_repo['node']['name']} ({most_starred_repo['node']['stargazers']['totalCount']} stars)"
+            if most_starred_repo else "None"
+        )
+
+        contributions = data["contributionsCollection"]
+
+        return {
+            "total_contributions": contributions["contributionCalendar"]["totalContributions"],
+            "public_contributions": (
+                contributions["totalCommitContributions"] +
+                contributions["totalIssueContributions"] +
+                contributions["totalPullRequestContributions"] +
+                contributions["totalPullRequestReviewContributions"]
+            ),
+            "private_contributions": contributions["restrictedContributionsCount"],
+            "stars_given": data["starredRepositories"]["totalCount"],
+            "most_starred_repo": most_starred_repo_info,
+            "total_issues": data["issues"]["totalCount"],
+            "total_prs": data["pullRequests"]["totalCount"],
+            "followers": data["followers"]["totalCount"],
+            "following": data["following"]["totalCount"]
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to fetch extended stats: {e}")
+        return {}
+
+def get_contribution_counts() -> Dict[str, int]:
+    """Fetch detailed contribution counts including private contributions."""
+    query = """
+    query($login: String!) {
+      user(login: $login) {
+        contributionsCollection {
+          totalCommitContributions
+          restrictedContributionsCount
+          totalIssueContributions
+          totalPullRequestContributions
+          totalPullRequestReviewContributions
         }
       }
     }
@@ -268,48 +340,19 @@ def get_extended_stats() -> Dict[str, Any]:
         result = graphql_query(query, variables)
 
         if not result.get("data") or not result["data"].get("user"):
-            logger.error("Invalid GraphQL response structure")
-            return {
-                "earned_stars": 0,
-                "lines_added": 0,
-                "lines_deleted": 0,
-                "total_issues": 0,
-                "total_prs": 0
-            }
+            return {}
 
-        data = result["data"]["user"]
-        earned_stars = sum(
-            repo["node"]["stargazers"]["totalCount"]
-            for repo in data["repositories"]["edges"]
-        )
-
-        lines_added = 0
-        lines_deleted = 0
-        for repo in data["repositories"]["edges"]:
-            branches = repo["node"].get("defaultBranchRef")
-            if branches and branches.get("target"):
-                history = branches["target"]["history"]
-                for commit in history.get("edges", []):
-                    lines_added += commit["node"].get("additions", 0)
-                    lines_deleted += commit["node"].get("deletions", 0)
-
+        contributions = result["data"]["user"]["contributionsCollection"]
         return {
-            "earned_stars": earned_stars,
-            "lines_added": lines_added,
-            "lines_deleted": lines_deleted,
-            "total_issues": data["issues"]["totalCount"],
-            "total_prs": data["pullRequests"]["totalCount"]
+            "commits": contributions["totalCommitContributions"],
+            "private": contributions["restrictedContributionsCount"],
+            "issues": contributions["totalIssueContributions"],
+            "prs": contributions["totalPullRequestContributions"],
+            "reviews": contributions["totalPullRequestReviewContributions"]
         }
-
     except Exception as e:
-        logger.error(f"Failed to fetch extended stats: {e}")
-        return {
-            "earned_stars": 0,
-            "lines_added": 0,
-            "lines_deleted": 0,
-            "total_issues": 0,
-            "total_prs": 0
-        }
+        logger.error(f"Failed to fetch contribution counts: {e}")
+        return {}
 
 def get_achievements() -> Dict[str, Any]:
     """Compute achievements from contribution history."""
@@ -333,13 +376,72 @@ def get_achievements() -> Dict[str, Any]:
 
     first_contribution = all_days[0].strftime("%b %d, %Y") if all_days else "N/A"
 
-    # Example placeholders
-    return {
-        "longest_streak": max_streak,
-        "first_contribution": first_contribution,
-        "followers_gained": 50,  # You can adjust this logic as needed
-        "most_starred_repo": "Example (500 stars)"  # Or fetch from real data
+    # Get follower growth data
+    query = """
+    query($login: String!) {
+      user(login: $login) {
+        followers {
+          totalCount
+        }
+        repositories(first: 100, orderBy: {field: STARGAZERS, direction: DESC}, privacy: PUBLIC) {
+          nodes {
+            name
+            stargazers {
+              totalCount
+            }
+            createdAt
+          }
+        }
+      }
     }
+    """
+
+    try:
+        variables = {"login": Config.USERNAME}
+        result = graphql_query(query, variables)
+
+        if result.get("data") and result["data"].get("user"):
+            data = result["data"]["user"]
+
+            # Get most starred repository
+            repos = data["repositories"]["nodes"]
+            most_starred = max(repos, key=lambda x: x["stargazers"]["totalCount"], default=None)
+            most_starred_info = (
+                f"{most_starred['name']} ({most_starred['stargazers']['totalCount']} stars)"
+                if most_starred else "None"
+            )
+
+            # Calculate followers gained (comparing with previous data or API)
+            current_followers = data["followers"]["totalCount"]
+
+            # For followers gained, you might want to store historical data
+            # Here's a simple approach using the creation date of newest repo
+            newest_repo = max(repos, key=lambda x: x["createdAt"], default=None)
+            days_active = (
+                (datetime.now() - datetime.strptime(newest_repo["createdAt"], "%Y-%m-%dT%H:%M:%SZ")).days
+                if newest_repo else 365
+            )
+            avg_followers_gained = round(current_followers / max(days_active/365, 1))
+
+        else:
+            most_starred_info = "None"
+            avg_followers_gained = 0
+
+        return {
+            "longest_streak": max_streak,
+            "first_contribution": first_contribution,
+            "followers_gained": avg_followers_gained,
+            "most_starred_repo": most_starred_info
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to fetch achievement data: {e}")
+        return {
+            "longest_streak": max_streak,
+            "first_contribution": first_contribution,
+            "followers_gained": 0,
+            "most_starred_repo": "None"
+        }
 
 # --- Generate Image ---
 
@@ -429,12 +531,16 @@ class ImageGenerator:
         try:
             start_y = 150
             ext_stats = get_extended_stats()
+            contribution_counts = get_contribution_counts()
+
             metrics = [
-                f"Total Stars: {repo_data['stars']} (Earned: {ext_stats['earned_stars']})",
-                f"Lines Added: +{ext_stats['lines_added']} | Lines Deleted: -{ext_stats['lines_deleted']}",
-                f"Total Contributions: {contributions}",
-                f"Issues: {ext_stats['total_issues']} | Pull Requests: {ext_stats['total_prs']}"
+                f"Total Contributions: {ext_stats['total_contributions']} (Public: {ext_stats['public_contributions']}, Private: {ext_stats['private_contributions']})",
+                f"Stars Earned: {repo_data['stars']} | Stars Given: {ext_stats['stars_given']}",
+                f"Issues: {ext_stats['total_issues']} | Pull Requests: {ext_stats['total_prs']}",
+                f"Most Starred: {ext_stats['most_starred_repo']}",
+                f"Followers: {ext_stats['followers']} | Following: {ext_stats['following']}"
             ]
+
             for i, m in enumerate(metrics):
                 self.draw.text((40, start_y + i * 40), m, fill=self.text_color, font=self.smaller_font)
 
