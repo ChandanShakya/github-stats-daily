@@ -21,9 +21,9 @@ jobs:
         run: pip install requests matplotlib pillow
 
       - name: Run Stats Script
-        - env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            USERNAME: ${{ secrets.USERNAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          USERNAME: ${{ secrets.USERNAME }}
         run: python scripts/stats_script.py
 
       - name: Commit and Push Updates
