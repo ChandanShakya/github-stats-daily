@@ -38,15 +38,13 @@ class Config:
     """Script configuration constants."""
     GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
     USERNAME = os.getenv("USERNAME")
-    OUTPUT_IMAGE = "stats_image.png"
+    OUTPUT_FILE = "README.md"  # Changed from OUTPUT_IMAGE
     BASE_URL = "https://api.github.com"
-    FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-    RATE_LIMIT_BUFFER = 100  # Keep buffer of requests
-    MIN_REMAINING_CALLS = 50  # Minimum remaining calls before warning
+    RATE_LIMIT_BUFFER = 100
+    MIN_REMAINING_CALLS = 50
 
     @classmethod
     def validate(cls) -> None:
-        """Validate required configuration."""
         if not cls.GITHUB_TOKEN or not cls.USERNAME:
             raise ValueError("GITHUB_TOKEN and USERNAME must be set as environment variables.")
 
@@ -457,8 +455,8 @@ def create_pie_chart(data: Dict[str, int], title: str, output_file: str) -> None
     plt.savefig(output_file)
     plt.close()
 
-def create_contribution_chart(contribution_data: Dict[str, Any], output_file: str) -> None:
-    """Create contribution trend chart with improved styling."""
+def create_contribution_chart(contribution_data: Dict[str, Any], output_file: str) -> str:
+    """Create contribution trend chart and return URL for embedding."""
     dates, counts = [], []
     for week in contribution_data['weeks']:
         for day in week['contributionDays']:
@@ -474,192 +472,69 @@ def create_contribution_chart(contribution_data: Dict[str, Any], output_file: st
     plt.savefig(output_file, bbox_inches='tight', transparent=True)
     plt.close()
 
-def generate_abstract_pattern(width: int, height: int, complexity: int = 30) -> Image.Image:
-    """Generate random abstract pattern."""
-    img = Image.new('RGB', (width, height), (35, 35, 35))
-    draw = ImageDraw.Draw(img)
+    # Return relative path to the image
+    return f"./contribution_graph.png"
 
-    # Generate random shapes and patterns
-    for _ in range(complexity):
-        shape_type = random.choice(['circle', 'line', 'rectangle'])
-        color = (
-            random.randint(30, 100),
-            random.randint(40, 120),
-            random.randint(50, 150)
-        )
+class MarkdownGenerator:
+    """Handles the generation of the statistics markdown."""
 
-        # Generate coordinates ensuring x1,y1 is always top-left and x2,y2 is bottom-right
-        x1 = random.randint(0, width - 1)
-        y1 = random.randint(0, height - 1)
-        x2 = random.randint(x1 + 1, width)
-        y2 = random.randint(y1 + 1, height)
+    def __init__(self):
+        self.content = []
 
-        if shape_type == 'circle':
-            draw.ellipse([x1, y1, x2, y2], fill=color, outline=None)
-        elif shape_type == 'line':
-            draw.line([x1, y1, x2, y2], fill=color, width=random.randint(1, 3))
-        else:
-            draw.rectangle([x1, y1, x2, y2], fill=color, outline=None)
+    def add_header(self, user_data: Dict):
+        """Add header section."""
+        self.content.extend([
+            f"# GitHub Statistics for @{user_data['username']}",
+            f"*Updated: {datetime.now().strftime('%B %d, %Y')}*",
+            "",
+            "## 📊 Statistics"
+        ])
 
-    # Apply filters for more aesthetic look
-    img = img.filter(ImageFilter.GaussianBlur(radius=2))
-    img = ImageEnhance.Brightness(img).enhance(0.7)
-    return img
+    def add_statistics(self, repo_data: Dict, contributions: int):
+        """Add statistics section."""
+        ext_stats = get_extended_stats()
 
-def generate_ascii_border() -> str:
-    """Generate random ASCII art border."""
-    borders = [
-        "╔══╗ ╔══╗",
-        "┌──┐ ┌──┐",
-        "╭──╮ ╭──╮",
-        "▄▄▄▄ ▄▄▄▄"
-    ]
-    return random.choice(borders)
+        # Main stats in table format
+        self.content.extend([
+            "| Metric | Count |",
+            "|--------|--------|",
+            f"| Total Contributions | {ext_stats['total_contributions']} |",
+            f"| Public Contributions | {ext_stats['public_contributions']} |",
+            f"| Private Contributions | {ext_stats['private_contributions']} |",
+            f"| Stars Received | {repo_data['stars']} |",
+            f"| Stars Given | {ext_stats['stars_given']} |",
+            f"| Total Issues | {ext_stats['total_issues']} |",
+            f"| Total PRs | {ext_stats['total_prs']} |",
+            f"| Followers | {ext_stats['followers']} |",
+            f"| Following | {ext_stats['following']} |",
+            ""
+        ])
 
-class ImageGenerator:
-    """Handles the generation of the statistics image."""
+    def add_contribution_graph(self, graph_path: str):
+        """Add contribution graph section."""
+        self.content.extend([
+            "## 📈 Contribution Graph",
+            "",
+            f"![Contribution Graph]({graph_path})",
+            ""
+        ])
 
-    def __init__(self, width: int = 1000, height: int = 1200):
-        self.width = width
-        self.height = height
-        self.bg_color = (35, 35, 35)
-        self.text_color = (255, 255, 255)
-        self.accent_color = (100, 149, 237)
-        self.font = ImageFont.truetype(Config.FONT_PATH, 28)
-        self.smaller_font = ImageFont.truetype(Config.FONT_PATH, 22)
-        self.img = None
-        self.draw = None
+    def add_achievements(self):
+        """Add achievements section."""
+        achievements = get_achievements()
+        self.content.extend([
+            "## 🏆 Achievements",
+            "",
+            f"- 🔥 Longest Streak: {achievements['longest_streak']} days",
+            f"- 👥 New Followers (avg): {achievements['followers_gained']} per year",
+            f"- 📅 First Contribution: {achievements['first_contribution']}",
+            f"- ⭐ Most Starred: {achievements['most_starred_repo']}",
+            ""
+        ])
 
-    def create_image(self, user_data: Dict, repo_data: Dict, contributions: int) -> None:
-        """Create the main statistics image."""
-        try:
-            self._create_base_image()
-
-            # Draw header
-            self._draw_header(user_data)
-
-            # Draw statistics
-            self._draw_statistics(repo_data, contributions)
-
-            # Save the final image
-            self.img.save(Config.OUTPUT_IMAGE)
-            logger.info(f"Image successfully saved as {Config.OUTPUT_IMAGE}")
-
-        except Exception as e:
-            logger.error(f"Failed to generate image: {e}")
-            raise
-        finally:
-            # Cleanup temporary files if they exist
-            for temp_file in ["contribution_chart.png", "languages_pie_chart.png"]:
-                if os.path.exists(temp_file):
-                    try:
-                        os.remove(temp_file)
-                    except Exception as e:
-                        logger.warning(f"Failed to remove temporary file {temp_file}: {e}")
-
-    def _create_base_image(self):
-        """Create base image with abstract background."""
-        self.img = generate_abstract_pattern(self.width, self.height)
-        self.draw = ImageDraw.Draw(self.img)
-
-        # Add semi-transparent overlay for better text readability
-        overlay = Image.new('RGBA', (self.width, self.height), (35, 35, 35, 180))
-        self.img = Image.alpha_composite(self.img.convert('RGBA'), overlay)
-        self.draw = ImageDraw.Draw(self.img)
-
-    def _draw_header(self, user_data: Dict) -> None:
-        """Draw the header section of the image."""
-        if not self.draw:
-            return
-        current_date = datetime.now().strftime("%b %d, %Y")
-        self.draw.text((40, 40), f"GitHub Statistics for @{user_data['username']}",
-                      fill=self.accent_color, font=self.font)
-        self.draw.text((40, 90), f"Updated: {current_date}",
-                      fill=self.text_color, font=self.smaller_font)
-
-    def _draw_statistics(self, repo_data: Dict, contributions: int) -> None:
-        """Draw the statistics section with improved layout."""
-        if not self.draw or not self.img:
-            return
-
-        try:
-            start_y = 150
-            ext_stats = get_extended_stats()
-
-            # Draw ASCII border
-            border = generate_ascii_border()
-            self.draw.text((40, start_y - 30), border, fill=self.accent_color, font=self.smaller_font)
-
-            metrics = [
-                f"▶ Total: {ext_stats['total_contributions']} (📊 Public: {ext_stats['public_contributions']}, 🔒 Private: {ext_stats['private_contributions']})",
-                f"⭐ Stars: {repo_data['stars']} Given: {ext_stats['stars_given']}",
-                f"📝 Issues: {ext_stats['total_issues']} | PRs: {ext_stats['total_prs']}",
-                f"👥 Followers: {ext_stats['followers']} | Following: {ext_stats['following']}"
-            ]
-
-            for i, m in enumerate(metrics):
-                self.draw.text((40, start_y + i * 35), m, fill=self.text_color, font=self.smaller_font)
-
-            # Contribution graph with reduced spacing
-            contrib_chart_file = "contribution_chart.png"
-            contribution_data = get_contribution_history()
-            create_contribution_chart(contribution_data, contrib_chart_file)
-            if os.path.exists(contrib_chart_file):
-                contrib_chart = Image.open(contrib_chart_file)
-                self.img.paste(contrib_chart.resize((900, 200)), (40, start_y + 160))
-                contrib_chart.close()
-
-            # Adjust other sections' positioning
-            self._draw_repositories(start_y + 400)
-            self._draw_achievements(start_y + 600)
-
-        except Exception as e:
-            logger.error(f"Error in drawing statistics: {e}")
-            raise
-
-    def _draw_repositories(self, start_y: int) -> None:
-        """Draw repository section."""
-        if not self.draw:
-            return
-        try:
-            top_repos = sorted(
-                fetch_data(f"{Config.BASE_URL}/users/{Config.USERNAME}/repos"),
-                key=lambda r: r["stargazers_count"],
-                reverse=True
-            )[:3]
-            repos_start_y = start_y + 1000
-            self.draw.text((40, repos_start_y), "Top Repositories",
-                         fill=self.accent_color, font=self.font)
-            for idx, repo in enumerate(top_repos):
-                line = (
-                    f"{idx+1}. {repo['name']} | Stars: {repo['stargazers_count']} "
-                    f"| Forks: {repo['forks_count']}"
-                )
-                self.draw.text((40, repos_start_y + 50 + (idx * 40)), line,
-                             fill=self.text_color, font=self.smaller_font)
-        except Exception as e:
-            logger.error(f"Failed to draw repositories: {e}")
-
-    def _draw_achievements(self, start_y: int) -> None:
-        """Draw achievements section."""
-        if not self.draw:
-            return
-        try:
-            achiev_y = start_y + 1200
-            self.draw.text((40, achiev_y), "Achievements",
-                         fill=self.accent_color, font=self.font)
-            achievements_data = get_achievements()
-            achievements = [
-                f"Longest Streak: {achievements_data['longest_streak']} days",
-                f"Followers Gained: {achievements_data['followers_gained']} this year",
-                f"First Contribution: {achievements_data['first_contribution']}",
-                f"Most Starred Repo: {achievements_data['most_starred_repo']}"
-            ]
-            for i, ach in enumerate(achievements):
-                self.draw.text((40, achiev_y + 50 + i * 40), ach,
-                             fill=self.text_color, font=self.smaller_font)
-        except Exception as e:
-            logger.error(f"Failed to draw achievements: {e}")
+    def generate(self) -> str:
+        """Generate the complete markdown content."""
+        return "\n".join(self.content)
 
 # --- Main Script ---
 
@@ -676,9 +551,26 @@ def main() -> None:
         repo_data = get_repo_data()
         contributions = get_contributions()
 
-        logger.info("Generating statistics image...")
-        image_generator = ImageGenerator()
-        image_generator.create_image(user_data, repo_data, contributions)
+        logger.info("Generating markdown content...")
+        md_gen = MarkdownGenerator()
+
+        # Generate contribution graph
+        graph_path = create_contribution_chart(
+            get_contribution_history(),
+            "contribution_graph.png"
+        )
+
+        # Generate markdown sections
+        md_gen.add_header(user_data)
+        md_gen.add_statistics(repo_data, contributions)
+        md_gen.add_contribution_graph(graph_path)
+        md_gen.add_achievements()
+
+        # Save markdown content
+        with open(Config.OUTPUT_FILE, 'w', encoding='utf-8') as f:
+            f.write(md_gen.generate())
+
+        logger.info(f"Markdown file successfully saved as {Config.OUTPUT_FILE}")
 
     except RateLimitError as e:
         logger.error(f"Rate limit reached: {e}")

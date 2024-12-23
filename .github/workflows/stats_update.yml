@@ -64,27 +64,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Generate Stats Image
+      - name: Generate Stats
         env:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
           USERNAME: ${{ secrets.USERNAME }}
         run: |
           python scripts/stats_script.py
-          # Ensure the image was created
-          if [ ! -f "stats_image.png" ]; then
-            echo "::error::Failed to generate stats image"
+          # Ensure the files were created
+          if [ ! -f "README.md" ] || [ ! -f "contribution_graph.png" ]; then
+            echo "::error::Failed to generate stats files"
             exit 1
           fi
-          # Create artifact to pass to next job
-          mkdir -p ./artifact
-          cp stats_image.png ./artifact/
         continue-on-error: false
 
-      - name: Upload Stats Image
+      - name: Upload Stats Files
         uses: actions/upload-artifact@v3
         with:
-          name: stats-image
-          path: ./artifact/stats_image.png
+          name: stats-files
+          path: |
+            README.md
+            contribution_graph.png
           retention-days: 1
 
   update-repo:
@@ -99,29 +98,22 @@ jobs:
           fetch-depth: 1
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download Stats Image
+      - name: Download Stats Files
         uses: actions/download-artifact@v3
         with:
-          name: stats-image
+          name: stats-files
           path: .
 
       - name: Commit and Push Updates
         run: |
-          # Configure git
           git config --local user.name "github-actions[bot]"
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # Add and commit changes
-          git add stats_image.png
-
-          # Get current date for commit message
+          git add README.md contribution_graph.png
           current_date=$(date +'%Y-%m-%d %H:%M:%S %Z')
-
-          # Commit and push if there are changes
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Update stats image for ${current_date}"
+            git commit -m "Update stats for ${current_date}"
             git push
           fi
         env:
