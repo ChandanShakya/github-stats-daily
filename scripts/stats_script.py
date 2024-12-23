@@ -13,6 +13,8 @@ import os
 import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
+import time
+from functools import wraps
 
 import requests
 from PIL import Image, ImageDraw, ImageFont
@@ -27,6 +29,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+class RateLimitError(Exception):
+    """Custom exception for rate limit handling."""
+    pass
+
 class Config:
     """Script configuration constants."""
     GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -34,12 +40,57 @@ class Config:
     OUTPUT_IMAGE = "stats_image.png"
     BASE_URL = "https://api.github.com"
     FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    RATE_LIMIT_BUFFER = 100  # Keep buffer of requests
+    MIN_REMAINING_CALLS = 50  # Minimum remaining calls before warning
 
     @classmethod
     def validate(cls) -> None:
         """Validate required configuration."""
         if not cls.GITHUB_TOKEN or not cls.USERNAME:
             raise ValueError("GITHUB_TOKEN and USERNAME must be set as environment variables.")
+
+def check_rate_limit() -> Dict[str, Any]:
+    """Check current rate limit status."""
+    try:
+        response = requests.get(
+            f"{Config.BASE_URL}/rate_limit",
+            headers={"Authorization": f"token {Config.GITHUB_TOKEN}"},
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json()["resources"]
+    except Exception as e:
+        logger.error(f"Failed to check rate limit: {e}")
+        raise
+
+def validate_rate_limit():
+    """Validate if we have enough API calls remaining."""
+    try:
+        limits = check_rate_limit()
+        core_remaining = limits["core"]["remaining"]
+        graphql_remaining = limits["graphql"]["remaining"]
+        search_remaining = limits["search"]["remaining"]
+
+        logger.info(f"API Rate Limits - Core: {core_remaining}, GraphQL: {graphql_remaining}, Search: {search_remaining}")
+
+        if any(remaining < Config.MIN_REMAINING_CALLS for remaining in
+               [core_remaining, graphql_remaining, search_remaining]):
+            logger.warning("API rate limit is running low!")
+
+        if any(remaining < 1 for remaining in
+               [core_remaining, graphql_remaining, search_remaining]):
+            reset_times = {
+                "core": datetime.fromtimestamp(limits["core"]["reset"]),
+                "graphql": datetime.fromtimestamp(limits["graphql"]["reset"]),
+                "search": datetime.fromtimestamp(limits["search"]["reset"])
+            }
+            raise RateLimitError(f"Rate limit exceeded. Resets at: {reset_times}")
+
+    except RateLimitError:
+        raise
+    except Exception as e:
+        logger.error(f"Rate limit validation failed: {e}")
+        raise
 
 # --- API Interaction ---
 def fetch_data(url: str) -> Dict[str, Any]:
@@ -56,6 +107,7 @@ def fetch_data(url: str) -> Dict[str, Any]:
         requests.exceptions.RequestException: If API request fails
     """
     try:
+        validate_rate_limit()
         headers = {"Authorization": f"token {Config.GITHUB_TOKEN}"}
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
@@ -93,6 +145,52 @@ def get_contributions() -> int:
     issues = fetch_data(f"{Config.BASE_URL}/search/issues?q=author:{Config.USERNAME}")
     return len(issues.get("items", []))
 
+def retry_on_error(max_retries=3, delay=5):
+    """Decorator to retry functions on failure."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            retries = 0
+            while retries < max_retries:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    retries += 1
+                    if retries == max_retries:
+                        logger.error(f"Failed after {max_retries} retries: {e}")
+                        raise
+                    logger.warning(f"Attempt {retries} failed, retrying in {delay} seconds...")
+                    time.sleep(delay)
+            return None
+        return wrapper
+    return decorator
+
+@retry_on_error(max_retries=3, delay=5)
+def graphql_query(query: str, variables: Dict = None) -> Dict[str, Any]:
+    """Execute GraphQL query with retries."""
+    try:
+        validate_rate_limit()
+        headers = {
+            "Authorization": f"Bearer {Config.GITHUB_TOKEN}",
+            "Content-Type": "application/json",
+        }
+        response = requests.post(
+            "https://api.github.com/graphql",
+            json={"query": query, "variables": variables or {}},
+            headers=headers,
+            timeout=30
+        )
+        response.raise_for_status()
+
+        result = response.json()
+        if "errors" in result:
+            raise Exception(f"GraphQL Error: {result['errors']}")
+        return result
+    except requests.exceptions.RequestException as e:
+        logger.error(f"API request failed: {e}")
+        raise
+
+@retry_on_error(max_retries=3, delay=5)
 def get_contribution_history() -> Dict[str, Any]:
     """Fetch contribution history for the past year."""
     query = """
@@ -114,22 +212,7 @@ def get_contribution_history() -> Dict[str, Any]:
     """
     try:
         variables = {"login": Config.USERNAME}
-        headers = {
-            "Authorization": f"Bearer {Config.GITHUB_TOKEN}",
-            "Content-Type": "application/json",
-        }
-        response = requests.post(
-            "https://api.github.com/graphql",
-            json={"query": query, "variables": variables},
-            headers=headers,
-            timeout=30
-        )
-        response.raise_for_status()
-
-        result = response.json()
-        if "errors" in result:
-            logger.error(f"GraphQL Error: {result['errors']}")
-            return {"totalContributions": 0, "weeks": []}
+        result = graphql_query(query, variables)
 
         if not result.get("data") or not result["data"].get("user"):
             logger.error("Invalid GraphQL response structure")
@@ -182,28 +265,7 @@ def get_extended_stats() -> Dict[str, Any]:
     """
     try:
         variables = {"login": Config.USERNAME}
-        headers = {
-            "Authorization": f"Bearer {Config.GITHUB_TOKEN}",
-            "Content-Type": "application/json",
-        }
-        response = requests.post(
-            "https://api.github.com/graphql",
-            json={"query": query, "variables": variables},
-            headers=headers,
-            timeout=30
-        )
-        response.raise_for_status()
-
-        result = response.json()
-        if "errors" in result:
-            logger.error(f"GraphQL Error: {result['errors']}")
-            return {
-                "earned_stars": 0,
-                "lines_added": 0,
-                "lines_deleted": 0,
-                "total_issues": 0,
-                "total_prs": 0
-            }
+        result = graphql_query(query, variables)
 
         if not result.get("data") or not result["data"].get("user"):
             logger.error("Invalid GraphQL response structure")
@@ -466,6 +528,9 @@ def main() -> None:
     """Main script execution."""
     try:
         Config.validate()
+        logger.info("Checking API rate limits...")
+        validate_rate_limit()
+
         logger.info("Fetching GitHub data...")
 
         user_data = get_user_data()
@@ -476,6 +541,9 @@ def main() -> None:
         image_generator = ImageGenerator()
         image_generator.create_image(user_data, repo_data, contributions)
 
+    except RateLimitError as e:
+        logger.error(f"Rate limit reached: {e}")
+        raise
     except Exception as e:
         logger.error(f"Script execution failed: {e}")
         raise

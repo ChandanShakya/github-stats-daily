@@ -69,6 +69,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
           USERNAME: ${{ secrets.USERNAME }}
         run: |
+          # Check rate limit before running
+          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/rate_limit)
+          core_remaining=$(echo $response | jq -r '.resources.core.remaining')
+          graphql_remaining=$(echo $response | jq -r '.resources.graphql.remaining')
+          search_remaining=$(echo $response | jq -r '.resources.search.remaining')
+
+          echo "Rate Limits - Core: $core_remaining, GraphQL: $graphql_remaining, Search: $search_remaining"
+
+          if [ $core_remaining -lt 50 ] || [ $graphql_remaining -lt 50 ] || [ $search_remaining -lt 50 ]; then
+            echo "::warning::API rate limits are running low!"
+          fi
+
+          if [ $core_remaining -lt 1 ] || [ $graphql_remaining -lt 1 ] || [ $search_remaining -lt 1 ]; then
+            echo "::error::Rate limits exceeded!"
+            exit 1
+          fi
+
           python scripts/stats_script.py
         continue-on-error: false
 
@@ -80,6 +97,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 2  # Need previous commit for file removal
 
       - name: Check for Changes
         id: check-changes
@@ -96,15 +115,18 @@ jobs:
           git config --local user.name "GitHub Action Bot"
           git config --local user.email "action@github.com"
 
-          # Stage only the stats image
+          # Remove old stats image if it exists in git
+          git rm -f stats_image.png || true
+
+          # Stage the new image
           git add stats_image.png
 
           # Get current date for commit message
-          current_date=$(date +'%Y-%m-%d')
+          current_date=$(date +'%Y-%m-%d %H:%M:%S %Z')
           git commit -m "Update stats image for ${current_date}"
 
-          # Push changes
-          git push origin ${GITHUB_REF#refs/heads/}
+          # Force push to ensure clean update
+          git push origin ${GITHUB_REF#refs/heads/} --force
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
