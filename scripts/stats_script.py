@@ -318,98 +318,147 @@ class ImageGenerator:
         self.accent_color = (100, 149, 237)
         self.font = ImageFont.truetype(Config.FONT_PATH, 28)
         self.smaller_font = ImageFont.truetype(Config.FONT_PATH, 22)
+        self.img = None
+        self.draw = None
 
     def create_image(self, user_data: Dict, repo_data: Dict, contributions: int) -> None:
-        """
-        Create the main statistics image.
-
-        Args:
-            user_data: User information dictionary
-            repo_data: Repository statistics dictionary
-            contributions: Number of user contributions
-        """
+        """Create the main statistics image."""
         try:
-            img = Image.new("RGB", (self.width, self.height), color=self.bg_color)
-            draw = ImageDraw.Draw(img)
+            self.img = Image.new("RGB", (self.width, self.height), color=self.bg_color)
+            self.draw = ImageDraw.Draw(self.img)
 
             # Draw header
-            self._draw_header(draw, user_data)
+            self._draw_header(user_data)
 
             # Draw statistics
-            self._draw_statistics(draw, repo_data, contributions)
+            self._draw_statistics(repo_data, contributions)
 
             # Save the final image
-            img.save(Config.OUTPUT_IMAGE)
+            self.img.save(Config.OUTPUT_IMAGE)
             logger.info(f"Image successfully saved as {Config.OUTPUT_IMAGE}")
 
         except Exception as e:
             logger.error(f"Failed to generate image: {e}")
             raise
+        finally:
+            # Cleanup temporary files if they exist
+            for temp_file in ["contribution_chart.png", "languages_pie_chart.png"]:
+                if os.path.exists(temp_file):
+                    try:
+                        os.remove(temp_file)
+                    except Exception as e:
+                        logger.warning(f"Failed to remove temporary file {temp_file}: {e}")
 
-    def _draw_header(self, draw: ImageDraw, user_data: Dict) -> None:
+    def _draw_header(self, user_data: Dict) -> None:
         """Draw the header section of the image."""
+        if not self.draw:
+            return
         current_date = datetime.now().strftime("%b %d, %Y")
-        draw.text((40, 40), f"GitHub Statistics for @{user_data['username']}", fill=self.accent_color, font=self.font)
-        draw.text((40, 90), f"Updated: {current_date}", fill=self.text_color, font=self.smaller_font)
+        self.draw.text((40, 40), f"GitHub Statistics for @{user_data['username']}",
+                      fill=self.accent_color, font=self.font)
+        self.draw.text((40, 90), f"Updated: {current_date}",
+                      fill=self.text_color, font=self.smaller_font)
 
-    def _draw_statistics(self, draw: ImageDraw, repo_data: Dict, contributions: int) -> None:
+    def _draw_statistics(self, repo_data: Dict, contributions: int) -> None:
         """Draw the statistics section of the image."""
-        start_y = 150
-        ext_stats = get_extended_stats()
-        metrics = [
-            f"Total Stars: {repo_data['stars']} (Earned: {ext_stats['earned_stars']})",
-            f"Lines Added: +{ext_stats['lines_added']} | Lines Deleted: -{ext_stats['lines_deleted']}",
-            f"Total Contributions: {contributions}",
-            f"Issues: {ext_stats['total_issues']} | Pull Requests: {ext_stats['total_prs']}"
-        ]
-        for i, m in enumerate(metrics):
-            draw.text((40, start_y + i * 40), m, fill=self.text_color, font=self.smaller_font)
+        if not self.draw or not self.img:
+            return
 
-        # Contribution Trends (reuse existing chart logic)
-        contrib_chart_file = "contribution_chart.png"
-        contribution_data = get_contribution_history()
-        create_contribution_chart(contribution_data, contrib_chart_file)
-        contrib_chart = Image.open(contrib_chart_file)
-        img.paste(contrib_chart.resize((900, 250)), (40, start_y + 300))
+        try:
+            start_y = 150
+            ext_stats = get_extended_stats()
+            metrics = [
+                f"Total Stars: {repo_data['stars']} (Earned: {ext_stats['earned_stars']})",
+                f"Lines Added: +{ext_stats['lines_added']} | Lines Deleted: -{ext_stats['lines_deleted']}",
+                f"Total Contributions: {contributions}",
+                f"Issues: {ext_stats['total_issues']} | Pull Requests: {ext_stats['total_prs']}"
+            ]
+            for i, m in enumerate(metrics):
+                self.draw.text((40, start_y + i * 40), m, fill=self.text_color, font=self.smaller_font)
 
-        # Language Distribution (reuse existing pie chart logic)
-        pie_chart_file = "languages_pie_chart.png"
-        create_pie_chart(repo_data["languages"], "Language Distribution", pie_chart_file)
-        lang_chart = Image.open(pie_chart_file)
-        img.paste(lang_chart.resize((400, 400)), (40, start_y + 580))
+            # Contribution Trends
+            contrib_chart_file = "contribution_chart.png"
+            try:
+                contribution_data = get_contribution_history()
+                create_contribution_chart(contribution_data, contrib_chart_file)
+                if os.path.exists(contrib_chart_file):
+                    contrib_chart = Image.open(contrib_chart_file)
+                    self.img.paste(contrib_chart.resize((900, 250)), (40, start_y + 300))
+                    contrib_chart.close()
+            except Exception as e:
+                logger.error(f"Failed to create contribution chart: {e}")
 
-        # Repository Engagement (basic example)
-        top_repos = sorted(fetch_data(f"{Config.BASE_URL}/users/{Config.USERNAME}/repos"), key=lambda r: r["stargazers_count"], reverse=True)[:3]
-        repos_start_y = start_y + 1000
-        draw.text((40, repos_start_y), "Top Repositories", fill=self.accent_color, font=self.font)
-        for idx, repo in enumerate(top_repos):
-            line = (
-                f"{idx+1}. {repo['name']} | Stars: {repo['stargazers_count']} "
-                f"| Forks: {repo['forks_count']}"
-            )
-            draw.text((40, repos_start_y + 50 + (idx * 40)), line, fill=self.text_color, font=self.smaller_font)
+            # Language Distribution
+            pie_chart_file = "languages_pie_chart.png"
+            try:
+                create_pie_chart(repo_data["languages"], "Language Distribution", pie_chart_file)
+                if os.path.exists(pie_chart_file):
+                    lang_chart = Image.open(pie_chart_file)
+                    self.img.paste(lang_chart.resize((400, 400)), (40, start_y + 580))
+                    lang_chart.close()
+            except Exception as e:
+                logger.error(f"Failed to create language chart: {e}")
 
-        # Achievements Section (placeholders)
-        achiev_y = repos_start_y + 200
-        draw.text((40, achiev_y), "Achievements", fill=self.accent_color, font=self.font)
-        achievements_data = get_achievements()
-        achievements = [
-            f"Longest Streak: {achievements_data['longest_streak']} days",
-            f"Followers Gained: {achievements_data['followers_gained']} this year",
-            f"First Contribution: {achievements_data['first_contribution']}",
-            f"Most Starred Repo: {achievements_data['most_starred_repo']}"
-        ]
-        for i, ach in enumerate(achievements):
-            draw.text((40, achiev_y + 50 + i * 40), ach, fill=self.text_color, font=self.smaller_font)
+            # Rest of the statistics drawing
+            self._draw_repositories(start_y)
+            self._draw_achievements(start_y)
+            self._draw_footer()
 
-        # Footer
+        except Exception as e:
+            logger.error(f"Error in drawing statistics: {e}")
+            raise
+
+    def _draw_repositories(self, start_y: int) -> None:
+        """Draw repository section."""
+        if not self.draw:
+            return
+        try:
+            top_repos = sorted(
+                fetch_data(f"{Config.BASE_URL}/users/{Config.USERNAME}/repos"),
+                key=lambda r: r["stargazers_count"],
+                reverse=True
+            )[:3]
+            repos_start_y = start_y + 1000
+            self.draw.text((40, repos_start_y), "Top Repositories",
+                         fill=self.accent_color, font=self.font)
+            for idx, repo in enumerate(top_repos):
+                line = (
+                    f"{idx+1}. {repo['name']} | Stars: {repo['stargazers_count']} "
+                    f"| Forks: {repo['forks_count']}"
+                )
+                self.draw.text((40, repos_start_y + 50 + (idx * 40)), line,
+                             fill=self.text_color, font=self.smaller_font)
+        except Exception as e:
+            logger.error(f"Failed to draw repositories: {e}")
+
+    def _draw_achievements(self, start_y: int) -> None:
+        """Draw achievements section."""
+        if not self.draw:
+            return
+        try:
+            achiev_y = start_y + 1200
+            self.draw.text((40, achiev_y), "Achievements",
+                         fill=self.accent_color, font=self.font)
+            achievements_data = get_achievements()
+            achievements = [
+                f"Longest Streak: {achievements_data['longest_streak']} days",
+                f"Followers Gained: {achievements_data['followers_gained']} this year",
+                f"First Contribution: {achievements_data['first_contribution']}",
+                f"Most Starred Repo: {achievements_data['most_starred_repo']}"
+            ]
+            for i, ach in enumerate(achievements):
+                self.draw.text((40, achiev_y + 50 + i * 40), ach,
+                             fill=self.text_color, font=self.smaller_font)
+        except Exception as e:
+            logger.error(f"Failed to draw achievements: {e}")
+
+    def _draw_footer(self) -> None:
+        """Draw footer section."""
+        if not self.draw:
+            return
         footer_y = self.height - 60
-        draw.text((40, footer_y), "Generated automatically by GitHub Stats Project", fill=self.text_color, font=self.smaller_font)
-
-        # Save image
-        img.save(Config.OUTPUT_IMAGE)
-        os.remove(pie_chart_file)
-        os.remove(contrib_chart_file)
+        self.draw.text((40, footer_y), "Generated automatically by GitHub Stats Project",
+                      fill=self.text_color, font=self.smaller_font)
 
 # --- Main Script ---
 
