@@ -69,25 +69,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TOKEN }}
           USERNAME: ${{ secrets.USERNAME }}
         run: |
-          # Check rate limit before running
-          response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/rate_limit)
-          core_remaining=$(echo $response | jq -r '.resources.core.remaining')
-          graphql_remaining=$(echo $response | jq -r '.resources.graphql.remaining')
-          search_remaining=$(echo $response | jq -r '.resources.search.remaining')
-
-          echo "Rate Limits - Core: $core_remaining, GraphQL: $graphql_remaining, Search: $search_remaining"
-
-          if [ $core_remaining -lt 50 ] || [ $graphql_remaining -lt 50 ] || [ $search_remaining -lt 50 ]; then
-            echo "::warning::API rate limits are running low!"
-          fi
-
-          if [ $core_remaining -lt 1 ] || [ $graphql_remaining -lt 1 ] || [ $search_remaining -lt 1 ]; then
-            echo "::error::Rate limits exceeded!"
+          python scripts/stats_script.py
+          # Ensure the image was created
+          if [ ! -f "stats_image.png" ]; then
+            echo "::error::Failed to generate stats image"
             exit 1
           fi
-
-          python scripts/stats_script.py
+          # Create artifact to pass to next job
+          mkdir -p ./artifact
+          cp stats_image.png ./artifact/
         continue-on-error: false
+
+      - name: Upload Stats Image
+        uses: actions/upload-artifact@v3
+        with:
+          name: stats-image
+          path: ./artifact/stats_image.png
+          retention-days: 1
 
   update-repo:
     name: Update Repository
@@ -98,35 +96,34 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
         with:
-          fetch-depth: 2  # Need previous commit for file removal
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check for Changes
-        id: check-changes
-        run: |
-          if [[ -f "stats_image.png" ]]; then
-            echo "changes=true" >> $GITHUB_OUTPUT
-          else
-            echo "changes=false" >> $GITHUB_OUTPUT
-          fi
+      - name: Download Stats Image
+        uses: actions/download-artifact@v3
+        with:
+          name: stats-image
+          path: .
 
       - name: Commit and Push Updates
-        if: steps.check-changes.outputs.changes == 'true'
         run: |
-          git config --local user.name "GitHub Action Bot"
-          git config --local user.email "action@github.com"
+          # Configure git
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Remove old stats image if it exists in git
-          git rm -f stats_image.png || true
-
-          # Stage the new image
+          # Add and commit changes
           git add stats_image.png
 
           # Get current date for commit message
           current_date=$(date +'%Y-%m-%d %H:%M:%S %Z')
-          git commit -m "Update stats image for ${current_date}"
 
-          # Force push to ensure clean update
-          git push origin ${GITHUB_REF#refs/heads/} --force
+          # Commit and push if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update stats image for ${current_date}"
+            git push
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
