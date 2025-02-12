@@ -78,7 +78,7 @@ jobs:
         continue-on-error: false
 
       - name: Upload Stats Files
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: stats-files
           path: |
