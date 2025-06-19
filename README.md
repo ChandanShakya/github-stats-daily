@@ -4,13 +4,13 @@
 ## 📊 Statistics
 | Metric | Count |
 |--------|--------|
-| Total Contributions | 1996 |
-| Public Contributions | 1968 |
+| Total Contributions | 2004 |
+| Public Contributions | 1976 |
 | Private Contributions | 0 |
 | Stars Received | 6 |
 | Stars Given | 322 |
-| Total Issues | 183 |
-| Total PRs | 149 |
+| Total Issues | 185 |
+| Total PRs | 150 |
 | Followers | 29 |
 | Following | 13 |
 
