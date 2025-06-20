@@ -4,14 +4,14 @@
 ## 📊 Statistics
 | Metric | Count |
 |--------|--------|
-| Total Contributions | 2004 |
-| Public Contributions | 1976 |
+| Total Contributions | 2014 |
+| Public Contributions | 1986 |
 | Private Contributions | 0 |
 | Stars Received | 6 |
 | Stars Given | 322 |
-| Total Issues | 185 |
-| Total PRs | 150 |
-| Followers | 29 |
+| Total Issues | 187 |
+| Total PRs | 152 |
+| Followers | 30 |
 | Following | 13 |
 
 ## 📈 Contribution Graph
@@ -21,6 +21,6 @@
 ## 🏆 Achievements
 
 - 🔥 Longest Streak: 20 days
-- 👥 New Followers (avg): 29 per year
+- 👥 New Followers (avg): 30 per year
 - 📅 First Contribution: Jun 16, 2024
 - ⭐ Most Starred: kurakahani.github.io (3 stars)
