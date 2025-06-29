@@ -1,5 +1,5 @@
 # GitHub Statistics for @ChandanShakya
-*Updated: June 28, 2025*
+*Updated: June 29, 2025*
 
 ## 📊 Statistics
 | Metric | Count |
@@ -22,5 +22,5 @@
 
 - 🔥 Longest Streak: 20 days
 - 👥 New Followers (avg): 30 per year
-- 📅 First Contribution: Jun 23, 2024
+- 📅 First Contribution: Jun 30, 2024
 - ⭐ Most Starred: kurakahani.github.io (3 stars)
