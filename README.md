@@ -8,7 +8,7 @@
 | Public Contributions | 2019 |
 | Private Contributions | 0 |
 | Stars Received | 7 |
-| Stars Given | 332 |
+| Stars Given | 335 |
 | Total Issues | 225 |
 | Total PRs | 165 |
 | Followers | 29 |
