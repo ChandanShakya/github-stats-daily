@@ -1,11 +1,11 @@
 # GitHub Statistics for @ChandanShakya
-*Updated: August 05, 2025*
+*Updated: August 06, 2025*
 
 ## 📊 Statistics
 | Metric | Count |
 |--------|--------|
-| Total Contributions | 1997 |
-| Public Contributions | 1969 |
+| Total Contributions | 2003 |
+| Public Contributions | 1975 |
 | Private Contributions | 0 |
 | Stars Received | 7 |
 | Stars Given | 354 |
