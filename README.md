@@ -4,8 +4,8 @@
 ## 📊 Statistics
 | Metric | Count |
 |--------|--------|
-| Total Contributions | 2010 |
-| Public Contributions | 1982 |
+| Total Contributions | 2030 |
+| Public Contributions | 2002 |
 | Private Contributions | 0 |
 | Stars Received | 7 |
 | Stars Given | 354 |
@@ -23,4 +23,4 @@
 - 🔥 Longest Streak: 20 days
 - 👥 New Followers (avg): 29 per year
 - 📅 First Contribution: Aug 04, 2024
-- ⭐ Most Starred: kurakahani.github.io (3 stars)
+- ⭐ Most Starred: Smart-Resume-Scanner (3 stars)
