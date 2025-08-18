@@ -1,15 +1,15 @@
 # GitHub Statistics for @ChandanShakya
-*Updated: August 17, 2025*
+*Updated: August 18, 2025*
 
 ## 📊 Statistics
 | Metric | Count |
 |--------|--------|
-| Total Contributions | 2866 |
-| Public Contributions | 2838 |
+| Total Contributions | 2793 |
+| Public Contributions | 2766 |
 | Private Contributions | 0 |
 | Stars Received | 7 |
 | Stars Given | 354 |
-| Total Issues | 232 |
+| Total Issues | 233 |
 | Total PRs | 174 |
 | Followers | 29 |
 | Following | 13 |
