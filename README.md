@@ -1,5 +1,5 @@
 # GitHub Statistics for @ChandanShakya
-*Updated: September 01, 2025*
+*Updated: September 02, 2025*
 
 ## 📊 Statistics
 | Metric | Count |
@@ -11,7 +11,7 @@
 | Stars Given | 358 |
 | Total Issues | 241 |
 | Total PRs | 179 |
-| Followers | 29 |
+| Followers | 30 |
 | Following | 14 |
 
 ## 📈 Contribution Graph
@@ -21,6 +21,6 @@
 ## 🏆 Achievements
 
 - 🔥 Longest Streak: 20 days
-- 👥 New Followers (avg): 29 per year
+- 👥 New Followers (avg): 30 per year
 - 📅 First Contribution: Sep 01, 2024
 - ⭐ Most Starred: Smart-Resume-Scanner (3 stars)
