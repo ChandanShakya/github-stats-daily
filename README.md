@@ -1,5 +1,5 @@
 # GitHub Statistics for @ChandanShakya
-*Updated: September 27, 2025*
+*Updated: September 28, 2025*
 
 ## 📊 Statistics
 | Metric | Count |
@@ -22,5 +22,5 @@
 
 - 🔥 Longest Streak: 20 days
 - 👥 New Followers (avg): 30 per year
-- 📅 First Contribution: Sep 22, 2024
+- 📅 First Contribution: Sep 29, 2024
 - ⭐ Most Starred: Smart-Resume-Scanner (3 stars)
