@@ -1,11 +1,11 @@
 # GitHub Statistics for @ChandanShakya
-*Updated: October 05, 2025*
+*Updated: October 06, 2025*
 
 ## 📊 Statistics
 | Metric | Count |
 |--------|--------|
-| Total Contributions | 2754 |
-| Public Contributions | 2726 |
+| Total Contributions | 2737 |
+| Public Contributions | 2709 |
 | Private Contributions | 0 |
 | Stars Received | 7 |
 | Stars Given | 366 |
@@ -23,4 +23,4 @@
 - 🔥 Longest Streak: 20 days
 - 👥 New Followers (avg): 30 per year
 - 📅 First Contribution: Oct 06, 2024
-- ⭐ Most Starred: Smart-Resume-Scanner (3 stars)
+- ⭐ Most Starred: mary-ui-starter-kit (4 stars)
