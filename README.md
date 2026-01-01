@@ -8,7 +8,7 @@
 | Public Contributions | 2654 |
 | Private Contributions | 1 |
 | Stars Received | 7 |
-| Stars Given | 386 |
+| Stars Given | 388 |
 | Total Issues | 276 |
 | Total PRs | 193 |
 | Followers | 31 |
